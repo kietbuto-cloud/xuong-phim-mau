@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Xưởng phim mẫu</title>
+<style>
+:root{--bg:#eef1f4;--ink:#1b2430;--mute:#5d6b7b;--line:#cfd6de;--card:#fff;--acc:#2f5bea;--film:#f2b134}
+@media(prefers-color-scheme:dark){:root{--bg:#141a21;--ink:#e8edf2;--mute:#97a4b3;--line:#2c3744;--card:#1c242d;--acc:#6f93ff}}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.55 "Segoe UI",system-ui,sans-serif}
+main{max-width:1000px;margin:auto;padding:28px 18px 80px}h1{font-size:28px;margin:0 0 4px}h2{font-size:18px;margin:0 0 10px}.sub{color:var(--mute);margin:0 0 20px}
+section{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:18px;margin-bottom:16px}
+button{font:inherit;border:1px solid var(--acc);background:var(--acc);color:white;border-radius:6px;padding:8px 14px;cursor:pointer}button.ghost{background:transparent;color:var(--acc)}button:disabled{opacity:.5;cursor:wait}
+button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-visible{outline:3px solid var(--film);outline-offset:2px}
+input,textarea,select{font:inherit;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:6px;padding:8px;width:100%}textarea{resize:vertical}
+.row{display:flex;gap:12px;flex-wrap:wrap;align-items:center;margin-top:10px}.row>*{flex:0 0 auto;width:auto}.check{display:flex;gap:7px;align-items:center}.check input{width:auto}
+.strip{display:flex;gap:8px;overflow-x:auto;padding:10px;background:#10151b;border-radius:6px;border-top:5px dotted var(--film)}.strip figure{margin:0;flex:0 0 170px;position:relative}
+.strip img{width:170px;height:108px;object-fit:contain;background-color:#ddd;background-image:linear-gradient(45deg,#bbb 25%,transparent 25%),linear-gradient(-45deg,#bbb 25%,transparent 25%),linear-gradient(45deg,transparent 75%,#bbb 75%),linear-gradient(-45deg,transparent 75%,#bbb 75%);background-size:16px 16px;background-position:0 0,0 8px,8px -8px,-8px 0;border-radius:3px;display:block}
+.strip figcaption{font-size:12px;color:#c3ccd6;max-height:40px;overflow:hidden;margin:4px 0}.strip select,.strip input{font-size:12px;padding:4px;margin:2px 0}.strip .x{position:absolute;top:3px;right:3px;padding:0 7px;background:#000a;border-color:transparent;line-height:22px}
+.scene{display:grid;grid-template-columns:150px 1fr;gap:12px;padding:12px 0;border-top:1px solid var(--line)}.scene img{width:150px;height:96px;object-fit:cover;border-radius:4px}.scene input,.scene textarea,.scene select{margin-bottom:6px}
+.template{font-size:13px;color:var(--mute);border-top:1px solid var(--line);padding:8px 0}#msg{color:var(--mute);min-height:24px;margin-top:8px}video{width:100%;max-height:480px;background:#000;border-radius:6px;margin-top:10px}.small{font-size:13px;color:var(--mute)}
+@media(max-width:560px){.scene{grid-template-columns:1fr}}
+</style></head>
+<body><main>
+<h1>Xưởng phim mẫu</h1><p class="sub">Ứng dụng dựng video local: phân tích mẫu, viết kịch bản, đọc lời thoại và xuất MP4.</p>
+<section><h2>1. Thư viện ảnh/video mẫu</h2>
+<input id="files" type="file" multiple accept="image/*,video/*">
+<div class="row"><label class="check"><input id="removeBg" type="checkbox"> Tách nền ảnh (rembg)</label><button id="up">Nạp mẫu</button><button id="style" class="ghost">Phân tích phong cách</button></div>
+<p id="guide" class="sub" style="margin-top:12px"></p><div id="templates"></div><div id="lib" class="strip"></div>
+<p class="small">Video sẽ được trích khung hình, đo thời lượng và phiên âm bằng faster-whisper. Lần đầu dùng Whisper sẽ tải model về máy.</p></section>
+<section><h2>2. Ý tưởng và kịch bản</h2>
+<textarea id="idea" rows="3" placeholder="Ví dụ: Vì sao tiền giấy đầu tiên của nước ta thất bại?"></textarea>
+<div class="row"><label>Số cảnh <input id="n" type="number" min="2" max="20" value="6" style="width:80px"></label><label>Ngôn ngữ <select id="lang"><option>Tiếng Việt</option><option>English</option></select></label><button id="gen">Viết kịch bản</button></div><div id="scenes"></div></section>
+<section><h2>3. Dựng video</h2><div class="row"><label>Khổ hình <select id="aspect"><option>16:9</option><option>9:16</option></select></label>
+<label>Giọng đọc <select id="voice"><option value="vi-VN-HoaiMyNeural">Việt - nữ</option><option value="vi-VN-NamMinhNeural">Việt - nam</option><option value="en-US-AriaNeural">English - female</option><option value="en-US-GuyNeural">English - male</option></select></label><button id="render">Dựng MP4</button></div><div id="result"></div></section>
+<div id="msg" role="status" aria-live="polite"></div></main>
+<script>
+const $=id=>document.getElementById(id);let items=[],script={title:"phim",scenes:[]};const msg=t=>$("msg").textContent=t||"";
+async function api(url,opt){const r=await fetch(url,opt);if(!r.ok){let d="";try{d=(await r.json()).detail}catch{}throw Error(d||r.statusText)}return r.json()}
+async function busy(btn,label,fn){btn.disabled=true;msg(label);try{await fn();msg("")}catch(e){msg("Lỗi: "+e.message)}finally{btn.disabled=false}}
+const esc=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+function drawLibrary(){
+ $("lib").innerHTML=items.length?items.map(i=>`<figure><img src="/files/library/${encodeURIComponent(i.file)}" alt=""><button class="x" data-del="${esc(i.id)}" aria-label="Xóa">×</button><figcaption>${esc(i.description)} · ${esc(i.type||"prop")}</figcaption><select data-type="${esc(i.id)}"><option value="character" ${i.type==="character"?"selected":""}>Nhân vật</option><option value="background" ${i.type==="background"?"selected":""}>Bối cảnh</option><option value="prop" ${i.type==="prop"?"selected":""}>Đồ vật</option></select><input data-tags="${esc(i.id)}" value="${esc((i.tags||[]).join(", "))}" aria-label="Tags, cách nhau bằng dấu phẩy"></figure>`).join(""):'<span style="color:#c3ccd6">Chưa có mẫu. Chọn tệp rồi bấm Nạp mẫu.</span>';
+ $("lib").querySelectorAll("[data-del]").forEach(b=>b.onclick=()=>busy(b,"Đang xóa...",async()=>{await api("/api/library/"+encodeURIComponent(b.dataset.del),{method:"DELETE"});await loadLib()}));
+ $("lib").querySelectorAll("[data-type]").forEach(s=>s.onchange=()=>saveMeta(s.dataset.type));
+ $("lib").querySelectorAll("[data-tags]").forEach(i=>i.onchange=()=>saveMeta(i.dataset.tags));
+}
+async function saveMeta(id){const typeEl=document.querySelector(`[data-type="${CSS.escape(id)}"]`),tagEl=document.querySelector(`[data-tags="${CSS.escape(id)}"]`);await api("/api/library/"+encodeURIComponent(id),{method:"PATCH",headers:{"Content-Type":"application/json"},body:JSON.stringify({type:typeEl.value,tags:tagEl.value.split(",").map(x=>x.trim()).filter(Boolean)})});const item=items.find(x=>x.id===id);if(item){item.type=typeEl.value;item.tags=tagEl.value.split(",").map(x=>x.trim()).filter(Boolean)}}
+async function loadLib(){const d=await api("/api/library");items=d.items;$ ("guide").textContent=d.style;$("templates").innerHTML=(d.templates||[]).map(t=>`<div class="template">Video mẫu: ${esc(t.filename)} · ${t.duration_seconds}s · khoảng ${t.approx_scene_seconds}s/cảnh · ${t.transcript?.length||0} đoạn phiên âm</div>`).join("");drawLibrary()}
+$("up").onclick=()=>busy($("up"),"Đang nạp mẫu; video/ảnh cần thời gian xử lý...",async()=>{const files=[...$("files").files];if(!files.length)throw Error("Chưa chọn tệp nào");const fd=new FormData();files.forEach(f=>fd.append("files",f));fd.append("remove_background_enabled",$("removeBg").checked);await api("/api/upload",{method:"POST",body:fd});$("files").value="";await loadLib()});
+$("style").onclick=()=>busy($("style"),"Đang phân tích phong cách...",async()=>{$("guide").textContent=(await api("/api/style",{method:"POST"})).guide});
+function drawScenes(){$("scenes").innerHTML=script.scenes.map((s,k)=>`<div class="scene"><img src="/files/library/${encodeURIComponent(items.find(i=>i.id===s.image_id)?.file||"")}" alt=""><div><select data-k="${k}" data-f="image_id">${items.map(i=>`<option value="${esc(i.id)}" ${i.id===s.image_id?"selected":""}>${esc((i.description||i.id).slice(0,70))} (${esc(i.type||"prop")})</option>`).join("")}</select><input data-k="${k}" data-f="caption" value="${esc(s.caption)}" placeholder="Phụ đề"><textarea data-k="${k}" data-f="narration" rows="2" placeholder="Lời đọc">${esc(s.narration)}</textarea></div></div>`).join("");$("scenes").querySelectorAll("[data-k]").forEach(el=>el.onchange=()=>{script.scenes[el.dataset.k][el.dataset.f]=el.value;if(el.dataset.f==="image_id")drawScenes()})}
+$("gen").onclick=()=>busy($("gen"),"Claude đang viết kịch bản...",async()=>{script=await api("/api/script",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({idea:$("idea").value,scenes:+$("n").value,language:$("lang").value})});drawScenes()});
+$("render").onclick=()=>busy($("render"),"Đang dựng video, có thể mất vài phút...",async()=>{if(!script.scenes.length)throw Error("Chưa có kịch bản");const d=await api("/api/render",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({title:script.title,scenes:script.scenes,aspect:$("aspect").value,voice:$("voice").value})});$("result").innerHTML=`<video controls src="${esc(d.url)}"></video><p><a href="${esc(d.url)}" download>Tải video MP4</a></p>`});
+loadLib().catch(e=>msg("Không kết nối được backend: "+e.message));
+</script></body></html>
